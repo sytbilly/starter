@@ -20,6 +20,7 @@
             user-select: none;
             cursor: pointer;
             transition: background-color 0.1s ease;
+            overflow: hidden; /* 防止空格键引起页面滚动 */
         }
 
         #status {
@@ -44,14 +45,15 @@
 </head>
 <body class="bg-idle" id="screen">
 
-    <div id="status">点击屏幕开始</div>
-    <div id="instruction">（支持手机触屏与电脑鼠标）</div>
+    <div id="status">点击屏幕或按空格键开始</div>
+    <div id="instruction">（支持手机触屏 / 电脑鼠标 / 空格键）</div>
 
     <script>
         let currentState = 'IDLE'; 
         let gunFiredTime = 0;
         let timeoutMarks = null;
         let timeoutSet = null;
+        let isAudioUnlocked = false; // 用于记录音频是否已解锁
 
         const screen = document.getElementById('screen');
         const statusText = document.getElementById('status');
@@ -60,42 +62,56 @@
         const AudioContext = window.AudioContext || window.webkitAudioContext;
         const audioCtx = new AudioContext();
 
-        // 语音播报：降低了语速，更加沉稳
+        // 解锁音频和语音引擎 (针对移动端限制)
+        function unlockAudioEngine() {
+            if (isAudioUnlocked) return;
+            
+            // 1. 解锁 Web Audio (枪声)
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+
+            // 2. 解锁 Web Speech (语音) - 播放一段完全静音的空白语音
+            const silentUtterance = new SpeechSynthesisUtterance('');
+            silentUtterance.volume = 0;
+            window.speechSynthesis.speak(silentUtterance);
+
+            isAudioUnlocked = true;
+        }
+
+        // 语音播报：沉稳发令员
         function speak(text) {
             window.speechSynthesis.cancel(); 
             const utterance = new SpeechSynthesisUtterance(text);
             utterance.lang = 'zh-CN';
-            utterance.rate = 0.8; // 语速调慢 (默认是1.0)
-            utterance.pitch = 0.9; // 音调稍微压低一点，增加严肃感
+            utterance.rate = 0.8; // 语速慢
+            utterance.pitch = 0.9; // 音调低
+            utterance.volume = 1; // 恢复正常音量
             window.speechSynthesis.speak(utterance);
         }
 
         // 合成真实的爆破枪声 (白噪声 + 低频冲击波)
         function playGunshot() {
-            if (audioCtx.state === 'suspended') {
-                audioCtx.resume();
-            }
+            if (audioCtx.state === 'suspended') audioCtx.resume();
             const time = audioCtx.currentTime;
 
-            // 1. 生成白噪声 (模拟火药爆破的"啪"声)
-            const bufferSize = audioCtx.sampleRate * 0.5; // 0.5秒长度
+            // 1. 生成白噪声 (火药爆破)
+            const bufferSize = audioCtx.sampleRate * 0.5;
             const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
             const data = buffer.getChannelData(0);
             for (let i = 0; i < bufferSize; i++) {
-                data[i] = Math.random() * 2 - 1; // 随机白噪声
+                data[i] = Math.random() * 2 - 1;
             }
             
             const noise = audioCtx.createBufferSource();
             noise.buffer = buffer;
 
-            // 用低通滤波器稍微切掉极高频，让声音发闷一些
             const noiseFilter = audioCtx.createBiquadFilter();
             noiseFilter.type = 'lowpass';
             noiseFilter.frequency.value = 2500; 
 
             const noiseGain = audioCtx.createGain();
             noiseGain.gain.setValueAtTime(1.5, time);
-            // 极快衰减
             noiseGain.gain.exponentialRampToValueAtTime(0.001, time + 0.25);
 
             noise.connect(noiseFilter);
@@ -103,10 +119,9 @@
             noiseGain.connect(audioCtx.destination);
             noise.start(time);
 
-            // 2. 生成低频冲击波 (模拟枪声底部的"砰"的厚重感)
+            // 2. 生成低频冲击波 (沉闷的厚重感)
             const osc = audioCtx.createOscillator();
             osc.type = 'sine';
-            // 频率瞬间下落
             osc.frequency.setValueAtTime(150, time);
             osc.frequency.exponentialRampToValueAtTime(10, time + 0.1);
 
@@ -120,11 +135,9 @@
             osc.stop(time + 0.3);
         }
 
-        // 核心流程控制
-        window.addEventListener('pointerdown', (e) => {
-            if (audioCtx.state === 'suspended') {
-                audioCtx.resume();
-            }
+        // 统一的处理逻辑 (不论是点击还是按键，都走这里)
+        function handleTrigger() {
+            unlockAudioEngine(); // 尝试解锁引擎
 
             if (currentState === 'IDLE' || currentState === 'RESULT') {
                 startSequence();
@@ -133,14 +146,36 @@
             } else if (currentState === 'GO') {
                 calculateReaction();
             }
+        }
+
+        // --- 事件监听区 ---
+
+        // 1. 监听屏幕触摸 / 鼠标点击
+        window.addEventListener('pointerdown', (e) => {
+            // 排除鼠标右键
+            if (e.button === 2) return; 
+            handleTrigger();
         });
+
+        // 2. 监听键盘空格键
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' || e.key === ' ') {
+                e.preventDefault(); // 阻止空格键使页面向下滚动的默认行为
+                
+                // 如果用户一直按住空格键不松手，会连续触发 keydown，这里用 e.repeat 过滤掉
+                if (!e.repeat) {
+                    handleTrigger();
+                }
+            }
+        });
+
+        // --- 核心流程控制 ---
 
         function startSequence() {
             currentState = 'MARKS';
             updateUI('各就位...', 'bg-marks', '');
             speak('各就位');
 
-            // 留出时间让语音播完，再过一会进入预备
             timeoutMarks = setTimeout(() => {
                 currentState = 'SET';
                 updateUI('预备...', 'bg-set', '保持静止！');
@@ -153,14 +188,14 @@
                     fireGun();
                 }, randomDelay);
 
-            }, 3000); // 延长了各就位到预备的时间（因为语速变慢了）
+            }, 3000); 
         }
 
         function fireGun() {
             currentState = 'GO';
             playGunshot();
             gunFiredTime = performance.now(); 
-            updateUI('跑！(点击屏幕)', 'bg-go', '');
+            updateUI('跑！', 'bg-go', '点击或按空格键');
         }
 
         function calculateReaction() {
@@ -182,7 +217,7 @@
                 evaluation = "（需要提高）";
             }
 
-            updateUI(`反应时间: ${formattedTime} 秒`, 'bg-idle', `${evaluation} - 点击再次训练`);
+            updateUI(`反应时间: ${formattedTime} 秒`, 'bg-idle', `${evaluation} - 点击或按空格继续`);
         }
 
         function falseStart() {
@@ -192,7 +227,7 @@
             
             currentState = 'RESULT';
             speak('抢跑');
-            updateUI('抢跑！', 'bg-false', '点击屏幕重新开始');
+            updateUI('抢跑！', 'bg-false', '点击或按空格重新开始');
         }
 
         function updateUI(mainText, bgColorClass, subText) {
