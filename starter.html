@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>短跑起跑反应训练</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background-color: #222;
+            color: #fff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            user-select: none;
+            cursor: pointer;
+            transition: background-color 0.1s ease;
+        }
+
+        #status {
+            font-size: 3rem;
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        #instruction {
+            font-size: 1.2rem;
+            color: #aaa;
+            text-align: center;
+        }
+
+        .bg-idle { background-color: #222 !important; }
+        .bg-marks { background-color: #1E88E5 !important; color: white !important;} 
+        .bg-set { background-color: #FFB300 !important; color: #222 !important;}   
+        .bg-go { background-color: #43A047 !important; color: white !important;}    
+        .bg-false { background-color: #E53935 !important; color: white !important;} 
+    </style>
+</head>
+<body class="bg-idle" id="screen">
+
+    <div id="status">点击屏幕开始</div>
+    <div id="instruction">（支持手机触屏与电脑鼠标）</div>
+
+    <script>
+        let currentState = 'IDLE'; 
+        let gunFiredTime = 0;
+        let timeoutMarks = null;
+        let timeoutSet = null;
+
+        const screen = document.getElementById('screen');
+        const statusText = document.getElementById('status');
+        const instructionText = document.getElementById('instruction');
+
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        const audioCtx = new AudioContext();
+
+        // 语音播报：降低了语速，更加沉稳
+        function speak(text) {
+            window.speechSynthesis.cancel(); 
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'zh-CN';
+            utterance.rate = 0.8; // 语速调慢 (默认是1.0)
+            utterance.pitch = 0.9; // 音调稍微压低一点，增加严肃感
+            window.speechSynthesis.speak(utterance);
+        }
+
+        // 合成真实的爆破枪声 (白噪声 + 低频冲击波)
+        function playGunshot() {
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+            const time = audioCtx.currentTime;
+
+            // 1. 生成白噪声 (模拟火药爆破的"啪"声)
+            const bufferSize = audioCtx.sampleRate * 0.5; // 0.5秒长度
+            const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = Math.random() * 2 - 1; // 随机白噪声
+            }
+            
+            const noise = audioCtx.createBufferSource();
+            noise.buffer = buffer;
+
+            // 用低通滤波器稍微切掉极高频，让声音发闷一些
+            const noiseFilter = audioCtx.createBiquadFilter();
+            noiseFilter.type = 'lowpass';
+            noiseFilter.frequency.value = 2500; 
+
+            const noiseGain = audioCtx.createGain();
+            noiseGain.gain.setValueAtTime(1.5, time);
+            // 极快衰减
+            noiseGain.gain.exponentialRampToValueAtTime(0.001, time + 0.25);
+
+            noise.connect(noiseFilter);
+            noiseFilter.connect(noiseGain);
+            noiseGain.connect(audioCtx.destination);
+            noise.start(time);
+
+            // 2. 生成低频冲击波 (模拟枪声底部的"砰"的厚重感)
+            const osc = audioCtx.createOscillator();
+            osc.type = 'sine';
+            // 频率瞬间下落
+            osc.frequency.setValueAtTime(150, time);
+            osc.frequency.exponentialRampToValueAtTime(10, time + 0.1);
+
+            const oscGain = audioCtx.createGain();
+            oscGain.gain.setValueAtTime(1.5, time);
+            oscGain.gain.exponentialRampToValueAtTime(0.001, time + 0.15);
+
+            osc.connect(oscGain);
+            oscGain.connect(audioCtx.destination);
+            osc.start(time);
+            osc.stop(time + 0.3);
+        }
+
+        // 核心流程控制
+        window.addEventListener('pointerdown', (e) => {
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+
+            if (currentState === 'IDLE' || currentState === 'RESULT') {
+                startSequence();
+            } else if (currentState === 'MARKS' || currentState === 'SET') {
+                falseStart();
+            } else if (currentState === 'GO') {
+                calculateReaction();
+            }
+        });
+
+        function startSequence() {
+            currentState = 'MARKS';
+            updateUI('各就位...', 'bg-marks', '');
+            speak('各就位');
+
+            // 留出时间让语音播完，再过一会进入预备
+            timeoutMarks = setTimeout(() => {
+                currentState = 'SET';
+                updateUI('预备...', 'bg-set', '保持静止！');
+                speak('预备');
+
+                // 预备到枪响：随机 0.5秒 到 2.4秒
+                const randomDelay = Math.random() * (2400 - 500) + 500;
+                
+                timeoutSet = setTimeout(() => {
+                    fireGun();
+                }, randomDelay);
+
+            }, 3000); // 延长了各就位到预备的时间（因为语速变慢了）
+        }
+
+        function fireGun() {
+            currentState = 'GO';
+            playGunshot();
+            gunFiredTime = performance.now(); 
+            updateUI('跑！(点击屏幕)', 'bg-go', '');
+        }
+
+        function calculateReaction() {
+            const reactionTime = performance.now() - gunFiredTime;
+            currentState = 'RESULT';
+            
+            const formattedTime = (reactionTime / 1000).toFixed(3);
+            
+            let evaluation = "";
+            if (reactionTime < 100) {
+                evaluation = "（压枪！可能犯规）";
+            } else if (reactionTime < 150) {
+                evaluation = "（世界级反应！）";
+            } else if (reactionTime < 200) {
+                evaluation = "（非常优秀）";
+            } else if (reactionTime < 300) {
+                evaluation = "（良好）";
+            } else {
+                evaluation = "（需要提高）";
+            }
+
+            updateUI(`反应时间: ${formattedTime} 秒`, 'bg-idle', `${evaluation} - 点击再次训练`);
+        }
+
+        function falseStart() {
+            clearTimeout(timeoutMarks);
+            clearTimeout(timeoutSet);
+            window.speechSynthesis.cancel();
+            
+            currentState = 'RESULT';
+            speak('抢跑');
+            updateUI('抢跑！', 'bg-false', '点击屏幕重新开始');
+        }
+
+        function updateUI(mainText, bgColorClass, subText) {
+            statusText.innerText = mainText;
+            instructionText.innerText = subText;
+            screen.className = bgColorClass;
+        }
+    </script>
+</body>
+</html>
