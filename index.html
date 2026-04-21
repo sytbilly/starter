@@ -53,7 +53,7 @@
         let gunFiredTime = 0;
         let timeoutMarks = null;
         let timeoutSet = null;
-        let isAudioUnlocked = false; // 用于记录音频是否已解锁
+        let isAudioUnlocked = false;
 
         const screen = document.getElementById('screen');
         const statusText = document.getElementById('status');
@@ -62,85 +62,55 @@
         const AudioContext = window.AudioContext || window.webkitAudioContext;
         const audioCtx = new AudioContext();
 
-        // 解锁音频和语音引擎 (针对移动端限制)
-        function unlockAudioEngine() {
+        // 新增：三段音频文件
+        const sfxOnYourMark = new Audio('onyourmark.wav');
+        const sfxSet = new Audio('set.wav');
+        const sfxGunshot = new Audio('gunshot.wav');
+
+        [sfxOnYourMark, sfxSet, sfxGunshot].forEach(a => {
+            a.preload = 'auto';
+        });
+
+        // 新增：统一播放函数
+        function playClip(audio) {
+            audio.currentTime = 0;
+            const p = audio.play();
+            if (p && typeof p.catch === 'function') {
+                p.catch(() => {});
+            }
+        }
+
+        // 修改：移动端音频解锁（对 HTMLAudio 也做 warmup）
+        async function unlockAudioEngine() {
             if (isAudioUnlocked) return;
-            
-            // 1. 解锁 Web Audio (枪声)
+
             if (audioCtx.state === 'suspended') {
-                audioCtx.resume();
+                await audioCtx.resume();
             }
 
-            // 2. 解锁 Web Speech (语音) - 播放一段完全静音的空白语音
-            const silentUtterance = new SpeechSynthesisUtterance('');
-            silentUtterance.volume = 0;
-            window.speechSynthesis.speak(silentUtterance);
+            const list = [sfxOnYourMark, sfxSet, sfxGunshot];
+            for (const a of list) {
+                try {
+                    a.muted = true;
+                    await a.play();
+                    a.pause();
+                    a.currentTime = 0;
+                    a.muted = false;
+                } catch (_) {}
+            }
 
             isAudioUnlocked = true;
         }
 
-        // 语音播报：沉稳发令员
-        function speak(text) {
-            window.speechSynthesis.cancel(); 
-            const utterance = new SpeechSynthesisUtterance(text);
-            utterance.lang = 'zh-CN';
-            utterance.rate = 0.8; // 语速慢
-            utterance.pitch = 0.9; // 音调低
-            utterance.volume = 1; // 恢复正常音量
-            window.speechSynthesis.speak(utterance);
-        }
-
-        // 合成真实的爆破枪声 (白噪声 + 低频冲击波)
-        function playGunshot() {
-            if (audioCtx.state === 'suspended') audioCtx.resume();
-            const time = audioCtx.currentTime;
-
-            // 1. 生成白噪声 (火药爆破)
-            const bufferSize = audioCtx.sampleRate * 0.5;
-            const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
-            const data = buffer.getChannelData(0);
-            for (let i = 0; i < bufferSize; i++) {
-                data[i] = Math.random() * 2 - 1;
-            }
-            
-            const noise = audioCtx.createBufferSource();
-            noise.buffer = buffer;
-
-            const noiseFilter = audioCtx.createBiquadFilter();
-            noiseFilter.type = 'lowpass';
-            noiseFilter.frequency.value = 2500; 
-
-            const noiseGain = audioCtx.createGain();
-            noiseGain.gain.setValueAtTime(1.5, time);
-            noiseGain.gain.exponentialRampToValueAtTime(0.001, time + 0.25);
-
-            noise.connect(noiseFilter);
-            noiseFilter.connect(noiseGain);
-            noiseGain.connect(audioCtx.destination);
-            noise.start(time);
-
-            // 2. 生成低频冲击波 (沉闷的厚重感)
-            const osc = audioCtx.createOscillator();
-            osc.type = 'sine';
-            osc.frequency.setValueAtTime(150, time);
-            osc.frequency.exponentialRampToValueAtTime(10, time + 0.1);
-
-            const oscGain = audioCtx.createGain();
-            oscGain.gain.setValueAtTime(1.5, time);
-            oscGain.gain.exponentialRampToValueAtTime(0.001, time + 0.15);
-
-            osc.connect(oscGain);
-            oscGain.connect(audioCtx.destination);
-            osc.start(time);
-            osc.stop(time + 0.3);
-        }
-
-        // 统一的处理逻辑 (不论是点击还是按键，都走这里)
         function handleTrigger() {
-            unlockAudioEngine(); // 尝试解锁引擎
+            unlockAudioEngine();
 
             if (currentState === 'IDLE' || currentState === 'RESULT') {
-                startSequence();
+                // 首次加载时延迟 100ms，确保音频引擎彻底准备好
+                const delay = isAudioUnlocked ? 0 : 100;
+                setTimeout(() => {
+                    startSequence();
+                }, delay);
             } else if (currentState === 'MARKS' || currentState === 'SET') {
                 falseStart();
             } else if (currentState === 'GO') {
@@ -148,42 +118,31 @@
             }
         }
 
-        // --- 事件监听区 ---
-
-        // 1. 监听屏幕触摸 / 鼠标点击
         window.addEventListener('pointerdown', (e) => {
-            // 排除鼠标右键
             if (e.button === 2) return; 
             handleTrigger();
         });
 
-        // 2. 监听键盘空格键
         window.addEventListener('keydown', (e) => {
             if (e.code === 'Space' || e.key === ' ') {
-                e.preventDefault(); // 阻止空格键使页面向下滚动的默认行为
-                
-                // 如果用户一直按住空格键不松手，会连续触发 keydown，这里用 e.repeat 过滤掉
+                e.preventDefault();
                 if (!e.repeat) {
                     handleTrigger();
                 }
             }
         });
 
-        // --- 核心流程控制 ---
-
         function startSequence() {
             currentState = 'MARKS';
             updateUI('各就位...', 'bg-marks', '');
-            speak('各就位');
+            playClip(sfxOnYourMark); // 原 speak('各就位')
 
             timeoutMarks = setTimeout(() => {
                 currentState = 'SET';
                 updateUI('预备...', 'bg-set', '保持静止！');
-                speak('预备');
+                playClip(sfxSet); // 原 speak('预备')
 
-                // 预备到枪响：随机 0.5秒 到 2.4秒
                 const randomDelay = Math.random() * (2400 - 500) + 500;
-                
                 timeoutSet = setTimeout(() => {
                     fireGun();
                 }, randomDelay);
@@ -191,9 +150,10 @@
             }, 3000); 
         }
 
+        // 修改：枪声改为文件
         function fireGun() {
             currentState = 'GO';
-            playGunshot();
+            playClip(sfxGunshot); // 原 playGunshot()
             gunFiredTime = performance.now(); 
             updateUI('跑！', 'bg-go', '点击或按空格键');
         }
@@ -223,10 +183,8 @@
         function falseStart() {
             clearTimeout(timeoutMarks);
             clearTimeout(timeoutSet);
-            window.speechSynthesis.cancel();
             
             currentState = 'RESULT';
-            speak('抢跑');
             updateUI('抢跑！', 'bg-false', '点击或按空格重新开始');
         }
 
