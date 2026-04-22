@@ -5,62 +5,364 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>短跑起跑反应训练</title>
     <style>
+        *, *::before, *::after {
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-0: #111317;
+            --bg-1: #1b1f25;
+            --panel: rgba(43, 48, 57, 0.5);
+            --panel-2: rgba(38, 43, 52, 0.4);
+            --panel-border: rgba(255, 255, 255, 0.2);
+            --text-main: #f5f6f7;
+            --text-sub: #b1b7c0;
+            --control-bg: rgba(255, 255, 255, 0.08);
+            --control-border: rgba(255, 255, 255, 0.23);
+            --idle: #252b33;
+            --marks: #2c3746;
+            --set: #3b372e;
+            --go: #283d33;
+            --false: #453033;
+        }
+
         body, html {
             margin: 0;
             padding: 0;
             width: 100%;
             height: 100%;
             display: flex;
+            justify-content: center;
+            align-items: center;
+            background:
+                radial-gradient(1100px 520px at 20% -20%, rgba(124, 137, 158, 0.22), transparent 62%),
+                radial-gradient(820px 420px at 100% 0%, rgba(93, 107, 128, 0.14), transparent 62%),
+                linear-gradient(160deg, var(--bg-0), var(--bg-1));
+            color: var(--text-main);
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', 'PingFang SC', sans-serif;
+            user-select: none;
+            overflow: hidden; /* 防止空格键引起页面滚动 */
+            position: relative;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            inset: -10%;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.07), transparent 46%);
+            pointer-events: none;
+            opacity: 0.4;
+        }
+
+        body::after {
+            content: '';
+            position: fixed;
+            width: 68vmin;
+            height: 68vmin;
+            right: -20vmin;
+            top: -20vmin;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.03) 46%, transparent 70%);
+            filter: blur(30px);
+            pointer-events: none;
+        }
+
+        .view {
+            width: min(92vw, 560px);
+            padding: 24px;
+            border-radius: 18px;
+            background: linear-gradient(145deg, var(--panel), var(--panel-2));
+            border: 1px solid var(--panel-border);
+            backdrop-filter: blur(24px) saturate(160%);
+            position: relative;
+            overflow: hidden;
+            box-shadow:
+                inset 0 1px 0 rgba(255, 255, 255, 0.22),
+                inset 0 -1px 0 rgba(0, 0, 0, 0.2),
+                0 20px 52px rgba(0, 0, 0, 0.45);
+        }
+
+        .view::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: inherit;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.02) 36%, transparent 68%);
+            pointer-events: none;
+        }
+
+        .mode-view::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 560 360'%3E%3Cg fill='none' stroke='%23ffffff' stroke-opacity='0.16' stroke-width='1.1'%3E%3Cellipse cx='280' cy='262' rx='228' ry='74'/%3E%3Cellipse cx='280' cy='262' rx='195' ry='63'/%3E%3Cellipse cx='280' cy='262' rx='162' ry='52'/%3E%3Cpath d='M90 262h380' stroke-opacity='0.12'/%3E%3Cpath d='M122 214h316' stroke-opacity='0.1'/%3E%3Cpath d='M122 310h316' stroke-opacity='0.1'/%3E%3C/g%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-size: 132% auto;
+            background-position: center 120%;
+            opacity: 0.16;
+            pointer-events: none;
+        }
+
+        .mode-view > * {
+            position: relative;
+            z-index: 1;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 1.28rem;
+            letter-spacing: -0.01em;
+            font-weight: 600;
+            text-transform: none;
+        }
+
+        .subtitle {
+            margin-top: 10px;
+            margin-bottom: 22px;
+            color: var(--text-sub);
+            font-size: 0.93rem;
+            line-height: 1.5;
+            letter-spacing: 0;
+        }
+
+        .mode-buttons {
+            display: grid;
+            gap: 13px;
+        }
+
+        .mode-btn {
+            appearance: none;
+            border: 1px solid var(--control-border);
+            border-radius: 10px;
+            padding: 14px 15px;
+            background: var(--control-bg);
+            color: var(--text-main);
+            font-size: 0.97rem;
+            font-weight: 600;
+            letter-spacing: 0;
+            text-align: left;
+            transition: transform 0.12s ease, background-color 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+            cursor: pointer;
+        }
+
+        .mode-btn:hover {
+            border-color: rgba(255, 255, 255, 0.36);
+            background: rgba(255, 255, 255, 0.11);
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22);
+        }
+
+        .mode-btn:active {
+            transform: translateY(1px) scale(0.995);
+        }
+
+        .mode-btn span {
+            display: block;
+            margin-top: 4px;
+            font-size: 0.82rem;
+            font-weight: 500;
+            color: var(--text-sub);
+        }
+
+        .watch-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+            gap: 12px;
+            min-height: 36px;
+            padding: 6px 7px 6px 12px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.16);
+            background: rgba(255, 255, 255, 0.055);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 -1px 0 rgba(0, 0, 0, 0.16);
+        }
+
+        .watch-title {
+            margin: 0;
+            font-size: 0.82rem;
+            letter-spacing: 0;
+            color: #d6dae0;
+            font-weight: 600;
+            text-transform: none;
+            opacity: 1;
+        }
+
+        .watch-chip {
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            border-radius: 999px;
+            padding: 5px 10px;
+            color: #e6ebf2;
+            font-size: 0.72rem;
+            letter-spacing: 0;
+            text-transform: none;
+            white-space: nowrap;
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        #screen {
+            width: 100%;
+            min-height: 260px;
+            border-radius: 16px;
+            padding: 22px 16px;
+            display: flex;
             flex-direction: column;
             justify-content: center;
             align-items: center;
-            background-color: #222;
-            color: #fff;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            user-select: none;
+            text-align: center;
             cursor: pointer;
-            transition: background-color 0.1s ease;
-            overflow: hidden; /* 防止空格键引起页面滚动 */
+            transition: background-color 0.18s ease, border-color 0.18s ease;
+            border: 1px solid rgba(255, 255, 255, 0.16);
+            box-shadow:
+                inset 0 1px 0 rgba(255, 255, 255, 0.07),
+                inset 0 -10px 24px rgba(0, 0, 0, 0.2);
+            position: relative;
+            overflow: hidden;
+        }
+
+        #screen::before {
+            content: none;
         }
 
         #status {
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', 'PingFang SC', sans-serif;
             font-size: 3rem;
-            font-weight: bold;
-            text-align: center;
+            font-weight: 600;
             margin-bottom: 20px;
+            letter-spacing: -0.02em;
+            text-shadow: none;
         }
 
         #instruction {
             font-size: 1.2rem;
-            color: #aaa;
-            text-align: center;
+            color: var(--text-sub);
+            letter-spacing: 0;
         }
 
-        .bg-idle { background-color: #222 !important; }
-        .bg-marks { background-color: #1E88E5 !important; color: white !important;} 
-        .bg-set { background-color: #FFB300 !important; color: #222 !important;}   
-        .bg-go { background-color: #43A047 !important; color: white !important;}    
-        .bg-false { background-color: #E53935 !important; color: white !important;} 
+        .controls {
+            margin-top: 12px;
+            display: flex;
+            justify-content: flex-end;
+        }
+
+        #backBtn {
+            appearance: none;
+            border: 1px solid var(--control-border);
+            border-radius: 10px;
+            padding: 10px 12px;
+            background: var(--control-bg);
+            color: var(--text-main);
+            cursor: pointer;
+            font-weight: 600;
+            letter-spacing: 0;
+        }
+
+        #backBtn:hover {
+            border-color: rgba(255, 255, 255, 0.35);
+            background: rgba(255, 255, 255, 0.12);
+            box-shadow: 0 5px 14px rgba(0, 0, 0, 0.2);
+        }
+
+        .bg-idle { background-color: var(--idle) !important; }
+        .bg-marks { background-color: var(--marks) !important; color: var(--text-main) !important; }
+        .bg-set { background-color: var(--set) !important; color: var(--text-main) !important; }
+        .bg-go { background-color: var(--go) !important; color: var(--text-main) !important; }
+        .bg-false { background-color: var(--false) !important; color: var(--text-main) !important; }
+
+        .bg-go {
+            border-color: rgba(151, 216, 182, 0.38) !important;
+            box-shadow:
+                inset 0 1px 0 rgba(255, 255, 255, 0.08),
+                0 0 0 1px rgba(121, 199, 163, 0.12);
+        }
+
+        .bg-false {
+            border-color: rgba(227, 155, 155, 0.32) !important;
+            box-shadow:
+                inset 0 1px 0 rgba(255, 255, 255, 0.08),
+                0 0 0 1px rgba(236, 156, 156, 0.12);
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .mode-btn,
+            #screen,
+            #backBtn {
+                transition: none;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .view {
+                width: 92vw;
+                padding: 18px;
+            }
+
+            #status {
+                font-size: 2.2rem;
+            }
+
+            #instruction {
+                font-size: 1rem;
+            }
+        }
     </style>
 </head>
-<body class="bg-idle" id="screen">
+<body>
+    <section id="modeView" class="view mode-view">
+        <h1>短跑起跑反应训练</h1>
+        <div class="subtitle">先选择训练分支，再进入全屏点击训练。进入后可连续重复执行，不再每轮询问。</div>
+        <div class="mode-buttons">
+            <button id="btnReaction" class="mode-btn">
+                测试反应时间
+                <span>枪响后点击屏幕，记录你的反应时</span>
+            </button>
+            <button id="btnStartOnly" class="mode-btn">
+                仅练起跑
+                <span>不计时，只听口令和枪声进行起跑训练</span>
+            </button>
+        </div>
+    </section>
 
-    <div id="status">点击屏幕或按空格键开始</div>
-    <div id="instruction">（支持手机触屏 / 电脑鼠标 / 空格键）</div>
+    <section id="trainView" class="view hidden">
+        <div class="watch-header">
+            <p class="watch-title">Workout</p>
+            <div id="modeChip" class="watch-chip">模式</div>
+        </div>
+
+        <div class="bg-idle" id="screen">
+            <div id="status">点击屏幕开始</div>
+            <div id="instruction">支持手机触屏 / 电脑鼠标 / 空格键</div>
+        </div>
+
+        <div class="controls">
+            <button id="backBtn">返回模式选择</button>
+        </div>
+    </section>
 
     <script>
         let currentState = 'IDLE'; 
         let gunFiredTime = 0;
         let timeoutMarks = null;
         let timeoutSet = null;
+        let timeoutGoEnd = null;
         let isAudioUnlocked = false;
+        let currentMode = 'reaction'; // reaction | startOnly
 
+        const modeView = document.getElementById('modeView');
+        const trainView = document.getElementById('trainView');
         const screen = document.getElementById('screen');
         const statusText = document.getElementById('status');
         const instructionText = document.getElementById('instruction');
+        const modeChip = document.getElementById('modeChip');
+        const btnReaction = document.getElementById('btnReaction');
+        const btnStartOnly = document.getElementById('btnStartOnly');
+        const backBtn = document.getElementById('backBtn');
 
         const AudioContext = window.AudioContext || window.webkitAudioContext;
-        const audioCtx = new AudioContext();
+        const audioCtx = AudioContext ? new AudioContext() : null;
 
         // 新增：三段音频文件
         const sfxOnYourMark = new Audio('onyourmark.wav');
@@ -84,7 +386,7 @@
         async function unlockAudioEngine() {
             if (isAudioUnlocked) return;
 
-            if (audioCtx.state === 'suspended') {
+            if (audioCtx && audioCtx.state === 'suspended') {
                 await audioCtx.resume();
             }
 
@@ -102,28 +404,58 @@
             isAudioUnlocked = true;
         }
 
-        function handleTrigger() {
+        function clearAllTimers() {
+            clearTimeout(timeoutMarks);
+            clearTimeout(timeoutSet);
+            clearTimeout(timeoutGoEnd);
+        }
+
+        function enterTraining(mode) {
+            currentMode = mode;
+            currentState = 'IDLE';
+            clearAllTimers();
+
+            modeChip.innerText = currentMode === 'reaction' ? '反应计时模式' : '仅练起跑模式';
+
+            modeView.classList.add('hidden');
+            trainView.classList.remove('hidden');
+
+            updateUI('点击屏幕开始', 'bg-idle', currentMode === 'reaction' ? '枪响后点击记录反应时间' : '仅练起跑，不记录反应时间');
+
             unlockAudioEngine();
+        }
+
+        function exitTraining() {
+            clearAllTimers();
+            currentState = 'IDLE';
+            trainView.classList.add('hidden');
+            modeView.classList.remove('hidden');
+        }
+
+        async function handleTrigger() {
+            if (trainView.classList.contains('hidden')) return;
 
             if (currentState === 'IDLE' || currentState === 'RESULT') {
-                // 首次加载时延迟 100ms，确保音频引擎彻底准备好
-                const delay = isAudioUnlocked ? 0 : 100;
-                setTimeout(() => {
-                    startSequence();
-                }, delay);
+                await unlockAudioEngine();
+                startSequence();
             } else if (currentState === 'MARKS' || currentState === 'SET') {
-                falseStart();
+                if (currentMode === 'reaction') {
+                    falseStart();
+                }
             } else if (currentState === 'GO') {
-                calculateReaction();
+                if (currentMode === 'reaction') {
+                    calculateReaction();
+                }
             }
         }
 
-        window.addEventListener('pointerdown', (e) => {
+        screen.addEventListener('pointerdown', (e) => {
             if (e.button === 2) return; 
             handleTrigger();
         });
 
         window.addEventListener('keydown', (e) => {
+            if (trainView.classList.contains('hidden')) return;
             if (e.code === 'Space' || e.key === ' ') {
                 e.preventDefault();
                 if (!e.repeat) {
@@ -132,15 +464,19 @@
             }
         });
 
+        btnReaction.addEventListener('click', () => enterTraining('reaction'));
+        btnStartOnly.addEventListener('click', () => enterTraining('startOnly'));
+        backBtn.addEventListener('click', exitTraining);
+
         function startSequence() {
             currentState = 'MARKS';
-            updateUI('各就位...', 'bg-marks', '');
-            playClip(sfxOnYourMark); // 原 speak('各就位')
+            updateUI('各就位...', 'bg-marks', currentMode === 'reaction' ? '等待枪响后点击' : '等待枪响后起跑');
+            playClip(sfxOnYourMark);
 
             timeoutMarks = setTimeout(() => {
                 currentState = 'SET';
                 updateUI('预备...', 'bg-set', '保持静止！');
-                playClip(sfxSet); // 原 speak('预备')
+                playClip(sfxSet);
 
                 const randomDelay = Math.random() * (2400 - 500) + 500;
                 timeoutSet = setTimeout(() => {
@@ -153,9 +489,19 @@
         // 修改：枪声改为文件
         function fireGun() {
             currentState = 'GO';
-            playClip(sfxGunshot); // 原 playGunshot()
+            playClip(sfxGunshot);
             gunFiredTime = performance.now(); 
-            updateUI('跑！', 'bg-go', '点击或按空格键');
+
+            if (currentMode === 'reaction') {
+                updateUI('跑！', 'bg-go', '点击或按空格键');
+                return;
+            }
+
+            updateUI('跑！', 'bg-go', '本轮仅练起跑');
+            timeoutGoEnd = setTimeout(() => {
+                currentState = 'RESULT';
+                updateUI('本轮完成', 'bg-idle', '仅练起跑模式 - 点击或按空格继续');
+            }, 900);
         }
 
         function calculateReaction() {
@@ -181,8 +527,7 @@
         }
 
         function falseStart() {
-            clearTimeout(timeoutMarks);
-            clearTimeout(timeoutSet);
+            clearAllTimers();
             
             currentState = 'RESULT';
             updateUI('抢跑！', 'bg-false', '点击或按空格重新开始');
